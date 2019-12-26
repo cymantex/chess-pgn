@@ -1,6 +1,6 @@
 {
   "name": "chess-pgn",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "author": "Simon Eriksson <smnrkssn@hotmail.se>",
   "license": "MIT",
@@ -9,7 +9,7 @@
   "types": "index.d.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dv16sen/chess-fen"
+    "url": "git+https://github.com/dv16sen/chess-pgn"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^4.0.0",
