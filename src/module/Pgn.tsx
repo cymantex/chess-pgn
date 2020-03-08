@@ -16,7 +16,13 @@ export class Pgn {
 
     constructor(args: PgnData|string = {}) {
         const parsedArgs = typeof args === "string" ? new PgnParser(args).parse() : args;
-        const {fen, tags, result, moves} = {fen: Fen.startingPosition, tags: {}, result: "*", moves: [], ...parsedArgs};
+        const {fen, tags, result, moves} = {
+            fen: Fen.startingPosition,
+            tags: {},
+            result: "*",
+            moves: [],
+            ...parsedArgs
+        };
         this.fen = new Fen(fen);
         this.tags = tags;
         this.result = result;
@@ -53,16 +59,25 @@ export class Pgn {
     public addTag = (key: string, value: string): Pgn => this.cloneWith({tag: {[key]: value}});
 
     public appendMove = (move: string, moves = this.moves): Pgn => {
-        const lastMove = moves[moves.length - 1];
+        const lastMove = this.getLastMove(moves);
 
         return this.cloneWith({
-            move: {
+            move: lastMove ? {
                 id: lastMove.id + 1,
-                number: lastMove.number + 1,
-                color: lastMove.color === PlayerColor.White ? PlayerColor.Black : PlayerColor.White,
+                number: lastMove.color === PlayerColor.Black ? lastMove.number + 1 : lastMove.number,
+                color: lastMove.color === PlayerColor.Black ? PlayerColor.White : PlayerColor.Black,
+                move
+            } : {
+                id: 0,
+                number: 1,
+                color: PlayerColor.White,
                 move
             }
         });
+    };
+
+    public getLastMove = (moves = this.moves): Move => {
+        return moves[moves.length - 1];
     };
 
     public toString = (): string => {

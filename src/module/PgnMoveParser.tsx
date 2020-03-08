@@ -20,7 +20,6 @@ export class PgnMoveParser {
     private nestedVariations: number;
     private readonly variationData: {[key: number]: VariationData};
 
-
     constructor(pgnMoveText: string) {
         this.moveText = pgnMoveText;
         this.moves = [];

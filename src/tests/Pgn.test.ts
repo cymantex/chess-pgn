@@ -1,7 +1,6 @@
 import Pgn from "../module/Pgn";
 import Fen from "chess-fen/Fen";
 import {PlayerColor} from "chess-fen/types";
-import _ from "lodash";
 
 const createTestPgn = ({event, date, fen, result = ""}: {event?: string, date?: string, fen?: string, result?: string}) => {
     const eventTag = event ? `[Event "${event}"]` : "";
@@ -74,7 +73,10 @@ describe("Pgn", () => {
 
             if(moveWithNestedVariationAndComment){
                 expect(moveWithNestedVariationAndComment.comment).toBeDefined();
-                expect(moveWithNestedVariationAndComment.variations.length).toBe(1)
+                expect(moveWithNestedVariationAndComment.variations).toBeDefined();
+                if(moveWithNestedVariationAndComment.variations){
+                    expect(moveWithNestedVariationAndComment.variations.length).toBe(1);
+                }
             }
         });
     });
@@ -125,24 +127,39 @@ describe("Pgn", () => {
     });
 
     it("Should appendMove", () => {
-        const pgnWithAppendedMove = pgn.appendMove("Ke8");
-        const lastWhiteMove = _.last(pgnWithAppendedMove.moves);
-        const lastBlackMove = _.last(pgnWithAppendedMove.appendMove("Ke1").moves);
+        const previousLastMove = pgn.getLastMove();
+        const lastWhiteMove = pgn.appendMove("Ke1").getLastMove();
+        const lastBlackMove = pgn.appendMove("Ke1").appendMove("Kd8").getLastMove();
 
         expect(lastWhiteMove).toBeDefined();
         expect(lastBlackMove).toBeDefined();
+        expect(previousLastMove).toBeDefined();
 
-        if(lastWhiteMove && lastBlackMove){
-            expect(lastWhiteMove.number).toBe(41);
-            expect(lastWhiteMove.id).toBe(124);
+        if(lastWhiteMove && lastBlackMove && previousLastMove){
+            expect(lastWhiteMove.number).toBe(previousLastMove.number + 1);
+            expect(lastWhiteMove.id).toBe(previousLastMove.id + 1);
             expect(lastWhiteMove.color).toBe(PlayerColor.White);
-            expect(lastWhiteMove.move).toBe("Ke8");
+            expect(lastWhiteMove.move).toBe("Ke1");
+            expect(lastBlackMove.id).toBe(previousLastMove.id + 2);
+            expect(lastBlackMove.number).toBe(previousLastMove.number + 1);
             expect(lastBlackMove.color).toBe(PlayerColor.Black);
+            expect(lastBlackMove.move).toBe("Kd8");
         }
     });
 
     it("Should addTag", () => {
         const tags = pgn.addTag("Foo", "foo").tags;
         expect(tags.Foo).toBe("foo");
+    });
+
+    it("Should handle empty PGN", () => {
+        const emptyPgn = new Pgn();
+        console.log(emptyPgn
+            .appendMove("d4")
+            .appendMove("d5")
+            .appendMove("c4")
+            .addTag("FEN", "fenstring")
+            .addResult("1-0")
+            .toString());
     });
 });
