@@ -29,6 +29,13 @@ export class Pgn {
         this.moves = moves;
     }
 
+    public static parse(pgnList: string): Pgn[] {
+        return pgnList
+            .split("\n\n[")
+            .map(pgn => !pgn.startsWith("[") ? "[" + pgn : pgn)
+            .map(pgn => new Pgn(pgn));
+    }
+
     public cloneWith(args: PgnCloneArgs = {}): Pgn {
         const defaults = {
             fen: this.fen.toString(),

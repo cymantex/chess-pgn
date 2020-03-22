@@ -1,6 +1,6 @@
 {
   "name": "chess-pgn",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": false,
   "author": "Simon Eriksson <smnrkssn@hotmail.se>",
   "license": "MIT",
@@ -29,7 +29,7 @@
     "typescript": "^3.7.4"
   },
   "dependencies": {
-    "chess-fen": "^0.1.15"
+    "chess-fen": "^0.1.17"
   },
   "scripts": {
     "start": "react-scripts start",
