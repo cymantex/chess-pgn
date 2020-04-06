@@ -1,6 +1,6 @@
 {
   "name": "chess-pgn",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": false,
   "author": "Simon Eriksson <smnrkssn@hotmail.se>",
   "license": "MIT",
@@ -28,9 +28,6 @@
     "react-scripts": "^3.0.1",
     "typescript": "^3.7.4"
   },
-  "dependencies": {
-    "chess-fen": "^0.1.17"
-  },
   "scripts": {
     "start": "react-scripts start",
     "build": "./scripts/build.sh",
@@ -46,5 +43,10 @@
     "not dead",
     "not ie <= 11",
     "not op_mini all"
-  ]
+  ],
+  "dependencies": {
+    "@types/uuid": "^7.0.2",
+    "chess-fen": "^0.2.2",
+    "uuid": "^7.0.3"
+  }
 }

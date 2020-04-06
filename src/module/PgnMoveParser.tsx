@@ -1,42 +1,22 @@
-import {PlayerColor} from "chess-fen/types";
-import {Move} from "./types";
-
-interface VariationData {
-    number: number,
-    color: PlayerColor,
-    variationId: number
-}
+import {VariationStack} from "./VariationStack";
+import {Move} from "./Move";
+import {isStandardNotation} from "./utils";
 
 export class PgnMoveParser {
-    private moveText: string;
+    private readonly moveText: string;
     private readonly moves: Move[];
-    private currentMoveNumber: number;
-    private currentMove: Move;
     private comment: string;
-    private currentColor: PlayerColor;
     private token: string;
-    private moveCount: number;
-    private variationCount: number;
-    private nestedVariations: number;
-    private readonly variationData: {[key: number]: VariationData};
+    private moveNumber: number;
+    private variationStack: VariationStack;
 
     constructor(pgnMoveText: string) {
         this.moveText = pgnMoveText;
-        this.moves = [];
-        this.currentMoveNumber = 0;
-        this.nestedVariations = 0;
-        this.variationData = {};
-        this.currentMove = {
-            id: 0,
-            number: 0,
-            color: PlayerColor.White,
-            move: ""
-        };
+        this.variationStack = new VariationStack();
+        this.moveNumber = 0;
         this.comment = "";
-        this.currentColor = PlayerColor.White;
         this.token = "";
-        this.moveCount = 0;
-        this.variationCount = 0;
+        this.moves = [];
     }
 
     public parse(): Move[] {
@@ -50,157 +30,99 @@ export class PgnMoveParser {
             });
 
         return this.moves;
-    };
+    }
 
     private parseComment(): void {
         if(this.isCommentStart()){
             this.comment = this.token.replace("{", "");
-            this.stopParsingToken();
+
+            if (this.comment.includes("}")) {
+                this.variationStack.addComment(this.comment.split("}")[0]);
+                this.token = this.token.replace(/.*}/, "");
+                this.comment = "";
+            } else {
+                this.stopParsingToken();
+            }
         } else if(this.isCommentEnd()){
-            this.comment = this.comment + " " + this.token.split("}")[0];
-            this.addComment();
+            this.variationStack.addComment(this.comment + " " + this.token.split("}")[0]);
             this.token = this.token.replace(/.*}/, "");
+            this.comment = "";
         } else if(this.comment){
             this.comment += " " + this.token;
             this.stopParsingToken();
         }
-    };
+    }
 
     private parseVariation(): void {
         if(this.isVariationStart()){
-            this.variationCount++;
-            this.updateVariationData();
-            this.nestedVariations++;
+            this.variationStack.addVariation();
         } else if(this.isVariationEnd()){
-            this.token = this.token.replace(")", "");
+            const numberOfEndedVariations = this.token.split(")").length - 1;
+            this.token = this.token.replace(/\)/g, "");
             this.parseMove();
-            this.nestedVariations--;
+
+            for(let i = 0; i < numberOfEndedVariations; i++){
+                this.variationStack.pop();
+            }
+
+            this.stopParsingToken();
         }
-    };
+    }
 
     private parseMove(): void {
         if(this.isMoveNumber()){
-            this.updateMoveNumber();
-        } else if(this.token.length > 1){
-            this.addMove();
-            this.updateColor();
-        } else if(this.token.length === 1){
-            this.currentMove.move += " " + this.token;
+            this.moveNumber = this.parseMoveNumber();
+        } else if(isStandardNotation(this.token)){
+            this.variationStack.addMove(this.token, this.moveNumber);
+            this.addMove(this.variationStack.getCurrentMove(), this.variationStack.getPreviousMove());
+        } else if(this.token.length > 0) {
+            const move = this.variationStack.getCurrentMove();
+            move.annotation = move.annotation ? move.annotation + " " + this.token : this.token;
         }
 
         this.stopParsingToken();
-    };
+    }
 
     private parseMoveNumber(): number {
         return parseInt(this.token.replace(/\W/g, ""), 10);
-    };
+    }
 
-    private updateVariationData(): void {
-        if(this.isVariation()){
-            this.variationData[this.nestedVariations + 1] = {
-                ...this.variationData[this.nestedVariations],
-                variationId: this.variationData[this.nestedVariations].variationId + 1,
-                color: this.toggleColor()
-            };
+    private addMove(nextMove: Move, previousMove: Move|null){
+        if (this.variationStack.size() > 1) {
+            if (previousMove && nextMove.color === previousMove.color) {
+                previousMove.variations.push([nextMove]);
+            } else {
+                const parentVariations = this.variationStack.getCurrentParent().variations;
+                parentVariations[parentVariations.length - 1].push(nextMove);
+            }
         } else {
-            this.variationData[1] = {
-                number: this.currentMoveNumber,
-                color: this.toggleColor(),
-                variationId: this.variationCount
-            };
+            this.moves.push(nextMove);
         }
-    };
+    }
 
-    private updateMoveNumber(): void {
-        if(this.isVariation()){
-            this.variationData[this.nestedVariations].number = this.parseMoveNumber();
-        } else {
-            this.currentMoveNumber = this.parseMoveNumber();
-        }
-    };
+    private isMoveNumber(string = this.token): boolean {
+        return /\d\./.test(string);
+    }
 
-    private toggleColor(): PlayerColor {
-        return this.getColor() === PlayerColor.White ? PlayerColor.Black : PlayerColor.White;
-    };
+    private isVariationStart(string = this.token): boolean {
+        return string.startsWith("(");
+    }
 
-    private updateColor(): void {
-        if(this.isVariation()){
-            this.variationData[this.nestedVariations].color = this.toggleColor();
-        } else {
-            this.currentColor = this.toggleColor();
-        }
-    };
+    private isVariationEnd(string = this.token): boolean {
+        return string.endsWith(")");
+    }
 
-    private addComment(moves = this.moves, comment = this.comment, nestedVariations = this.nestedVariations): void {
-        if(nestedVariations === 0){
-            moves[moves.length - 1].comment = comment;
-            this.comment = "";
-        } else {
-            this.addComment(moves[moves.length - 1].variations, comment, nestedVariations - 1);
-        }
-    };
+    private isCommentStart(string = this.token): boolean {
+        return string.includes("{");
+    }
 
-    private addMove(moves = this.moves, move = this.token, nestedVariations = this.nestedVariations): void {
-        const createMove = () => {
-            this.currentMove = {
-                id: this.moveCount,
-                number: this.getMoveNumber(),
-                color: this.getColor(),
-                move,
-            };
-
-            this.moveCount++;
-            return this.currentMove;
-        };
-
-        if(nestedVariations === 0){
-            moves.push(createMove());
-        } else if(!moves[moves.length - 1].variations){
-            moves[moves.length - 1].variations = [createMove()];
-        } else {
-            this.addMove(moves[moves.length - 1].variations, move, nestedVariations - 1);
-        }
-    };
-
-    private getMoveNumber(): number {
-        return this.isVariation() && this.variationData[this.nestedVariations].number
-            ? this.variationData[this.nestedVariations].number
-            : this.currentMoveNumber;
-    };
-
-    private getColor(): PlayerColor {
-        return this.isVariation() && this.variationData[this.nestedVariations].color
-            ? this.variationData[this.nestedVariations].color
-            : this.currentColor;
-    };
-
-    private isMoveNumber(): boolean {
-        return this.token.match(/\d\./) != null;
-    };
-
-    private isVariation(): boolean {
-        return this.nestedVariations > 0;
-    };
-
-    private isVariationStart(): boolean {
-        return this.token.startsWith("(");
-    };
-
-    private isVariationEnd(): boolean {
-        return this.token.endsWith(")");
-    };
-
-    private isCommentStart(): boolean {
-        return this.token.includes("{");
-    };
-
-    private isCommentEnd(): boolean {
-        return this.token.includes("}");
-    };
+    private isCommentEnd(string = this.token): boolean {
+        return string.includes("}");
+    }
 
     private stopParsingToken(): void {
         this.token = "";
-    };
+    }
 }
 
 export default PgnMoveParser;

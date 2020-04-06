@@ -1,14 +1,15 @@
-import {PlayerColor} from "chess-fen/types";
+import {Move} from "./Move";
 
 export interface Tags {
     [key: string]: string
 }
 
-export interface Move {
-    id: number,
-    number: number,
-    color: PlayerColor,
-    move: string,
-    variations?: Move[],
+export interface MoveArgs {
+    name: string,
     comment?: string
+}
+
+export interface Variation {
+    parentMoveId?: string,
+    moves: Move[]
 }
