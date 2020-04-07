@@ -6,7 +6,7 @@ import {Move} from "./Move";
 export interface PgnData {
     tags: Tags,
     result: string,
-    moves: Move[],
+    moveTree: Move,
     currentMove?: Move
 }
 
@@ -30,13 +30,15 @@ export class PgnParser {
 
     public parse(): PgnData {
         const tags = this.parseTags();
-        const moves = new PgnMoveParser(this.parseMoveText()).parse();
+        const moveTree = new PgnMoveParser(this.parseMoveText()).parse();
 
         return {
             tags,
             result: this.parseResult(),
-            moves,
-            currentMove: moves[moves.length - 1]
+            moveTree,
+            currentMove: moveTree.variations.length > 0
+                ? moveTree.variations[0][moveTree.variations[0].length - 1]
+                : moveTree
         };
     }
 

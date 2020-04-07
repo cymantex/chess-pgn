@@ -3,9 +3,11 @@ import {Variation} from "./types";
 
 export class VariationStack {
     readonly stack: Variation[];
+    readonly root: Move;
 
-    constructor(){
-        this.stack = [{moves: []}];
+    constructor(root: Move){
+        this.root = root;
+        this.stack = [{moves: [root]}];
     }
 
     addVariation(){
@@ -27,13 +29,7 @@ export class VariationStack {
 
     getCurrentMove(){
         const moves = this.top().moves;
-        const currentMove = moves[moves.length - 1];
-
-        if(currentMove) {
-            return currentMove;
-        }
-
-        return currentMove;
+        return moves[moves.length - 1];
     }
 
     getPreviousMove(): Move|null {
@@ -44,7 +40,7 @@ export class VariationStack {
             return previousMove;
         }
 
-        moves = this.stack[this.stack.length - 2] ? this.stack[this.stack.length - 2].moves : [];
+        moves = this.previous() ? this.previous().moves : [];
         previousMove = moves[moves.length - 1];
 
         return previousMove ? previousMove : null;
@@ -54,16 +50,20 @@ export class VariationStack {
         return this.stack[this.stack.length - 1];
     }
 
+    previous(){
+        return this.stack[this.stack.length - 2];
+    }
+
     getCurrentParent(): Move {
-        const moves = this.stack[this.stack.length - 2] ? this.stack[this.stack.length - 2].moves : [];
-        return moves[moves.length - 1];
+        const parentMoves = this.stack[this.stack.length - 2].moves;
+        return parentMoves[parentMoves.length - 2] ? parentMoves[parentMoves.length - 2] : this.root;
     }
 
     pop(): Variation {
         const variation = this.stack.pop();
 
         if (!variation) {
-            throw new Error("Tried to pop an empty stack.");
+            throw new Error("Tried to pop an root stack.");
         }
 
         return variation;
@@ -75,13 +75,16 @@ export class VariationStack {
 
     private getCurrentColor(){
         const move = this.getCurrentMove();
+        const previousMove = this.getPreviousMove();
 
         if (move) {
             return move.color === "white" ? "black" : "white";
-        } else if(this.size() > 1) {
-            const parentMoves = this.stack[this.stack.length - 2].moves;
-            const parentMove = parentMoves[parentMoves.length - 1];
-            return parentMove.color;
+        } else if(previousMove) {
+            if(previousMove.name === "root") {
+                return "white";
+            }
+
+            return previousMove.color;
         }
 
         return "white";

@@ -1,10 +1,11 @@
 import {VariationStack} from "./VariationStack";
 import {Move} from "./Move";
 import {isStandardNotation} from "./utils";
+import {Color} from "chess-fen/types";
 
 export class PgnMoveParser {
     private readonly moveText: string;
-    private readonly moves: Move[];
+    private readonly moveTree: Move;
     private comment: string;
     private token: string;
     private moveNumber: number;
@@ -12,14 +13,15 @@ export class PgnMoveParser {
 
     constructor(pgnMoveText: string) {
         this.moveText = pgnMoveText;
-        this.variationStack = new VariationStack();
+        this.moveTree = Move.root();
+        this.variationStack = new VariationStack(this.moveTree);
+        this.variationStack.addVariation();
         this.moveNumber = 0;
         this.comment = "";
         this.token = "";
-        this.moves = [];
     }
 
-    public parse(): Move[] {
+    public parse(): Move {
         this.moveText
             .split(" ")
             .forEach(token => {
@@ -29,7 +31,7 @@ export class PgnMoveParser {
                 this.parseMove();
             });
 
-        return this.moves;
+        return this.moveTree;
     }
 
     private parseComment(): void {
@@ -74,7 +76,7 @@ export class PgnMoveParser {
             this.moveNumber = this.parseMoveNumber();
         } else if(isStandardNotation(this.token)){
             this.variationStack.addMove(this.token, this.moveNumber);
-            this.addMove(this.variationStack.getCurrentMove(), this.variationStack.getPreviousMove());
+            this.addMove(this.variationStack.getCurrentMove(), this.variationStack.getCurrentParent());
         } else if(this.token.length > 0) {
             const move = this.variationStack.getCurrentMove();
             move.annotation = move.annotation ? move.annotation + " " + this.token : this.token;
@@ -87,17 +89,29 @@ export class PgnMoveParser {
         return parseInt(this.token.replace(/\W/g, ""), 10);
     }
 
-    private addMove(nextMove: Move, previousMove: Move|null){
-        if (this.variationStack.size() > 1) {
-            if (previousMove && nextMove.color === previousMove.color) {
-                previousMove.variations.push([nextMove]);
-            } else {
-                const parentVariations = this.variationStack.getCurrentParent().variations;
-                parentVariations[parentVariations.length - 1].push(nextMove);
-            }
+    private addMove(nextMove: Move, parent: Move){
+        if(this.isNewVariation()) {
+            parent.variations.push([nextMove]);
+        } else if(this.isVariation()) {
+            parent.variations[parent.variations.length - 1].push(nextMove);
         } else {
-            this.moves.push(nextMove);
+            // main line
+            this.moveTree.variations[0].push(nextMove);
         }
+    }
+
+    private isVariation(){
+        return this.variationStack.size() > 2;
+    }
+
+    private isNewVariation(): boolean {
+        const nextMove = this.variationStack.getCurrentMove();
+        const parent = this.variationStack.getCurrentParent();
+
+        return nextMove.color !== parent.color && (
+            (parent.color === "white" && nextMove.number === parent.number) ||
+            (parent.color === "black" && nextMove.number === parent.number + 1)
+        );
     }
 
     private isMoveNumber(string = this.token): boolean {

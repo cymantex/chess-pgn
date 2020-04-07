@@ -12,7 +12,7 @@ export interface ConstructorArgs {
 }
 
 export class Move {
-    id: string;
+    readonly id: string;
     number: number;
     color: Color;
     name: string;
@@ -30,7 +30,7 @@ export class Move {
         this.variations = variations;
     }
 
-    static empty(): Move {
-        return new Move({number: 0, color: "black", name: ""})
+    static root(): Move {
+        return new Move({number: 0, color: "black", name: "root"})
     }
 }
