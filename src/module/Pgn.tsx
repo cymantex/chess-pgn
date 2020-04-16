@@ -9,6 +9,7 @@ export interface PgnCloneArgs extends Partial<PgnData> {}
 
 //TODO: add delete variation / move
 //TODO: add promoting/demoting variations?
+//TODO: adds [undefined] in nextMoves from empty root
 export class Pgn {
     readonly tags: Tags;
     readonly result: string;
@@ -129,7 +130,11 @@ export class Pgn {
         const currentMove = this.getCurrentMove();
 
         if (Move.isRoot(currentMove)) {
-            return this.variationMap.getMainLines().map(mainLine => mainLine[0]);
+            return this
+                .variationMap
+                .getMainLines()
+                .map(mainLine => mainLine[0])
+                .filter(move => move);
         }
 
         const variation = this.variationMap.getVariation(currentMove.variationId);

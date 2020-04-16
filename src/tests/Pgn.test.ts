@@ -49,23 +49,6 @@ describe("Parsing tests", () => {
 });
 
 describe("methods", () => {
-    const pgn = new Pgn()
-        .addTag("Title", "Example pgn")
-        .addTag("Description", "Shows how to add tags, moves, variations and comments")
-        .move("e4")
-        .comment("king's pawn")
-        .startingPosition()
-        .move("d4")
-        .move("Nf6")
-        .firstMove()
-        .move("d5")
-        .selectMove(move => move.name === "e4")
-        .move("e5")
-        .previousMove()
-        .move("c5");
-
-    console.log(pgn.toString());
-
     describe("toString", () => {
         it("converts tags to string", () => {
             const actualTags = pgn.toString().split("\n\n")[0];
@@ -85,7 +68,7 @@ describe("methods", () => {
             expect(new Pgn(moves).toString()).toBe(moves);
         });
 
-        it("converts flat nextMoves of moves to string", () => {
+        it("converts flat list of moves to string", () => {
             const moves = "1. e4 c5 2. Nf3 *";
             expect(new Pgn(moves).toString()).toBe(moves);
         });
@@ -138,22 +121,34 @@ describe("methods", () => {
         expect(pgn.addResult("1-0").result).toBe("1-0");
     });
 
-    it("should find nextMoves", () => {
-        const nextMoves = new Pgn("1. e4 c5 (1... Nf6) (1... e5)")
-            .selectMove(move => move.name === "e4")
-            .nextMoves()
-            .map(move => move.name);
+    describe("nextMoves", () => {
+        it("should find nextMoves", () => {
+            const nextMoves = new Pgn("1. e4 c5 (1... Nf6) (1... e5)")
+                .selectMove(move => move.name === "e4")
+                .nextMoves()
+                .map(move => move.name);
 
-        expect(nextMoves).toEqual(["c5", "Nf6", "e5"]);
+            expect(nextMoves).toEqual(["c5", "Nf6", "e5"]);
+        });
+
+        it("should return empty list from starting position", () => {
+            expect(new Pgn("").nextMoves().length).toBe(0);
+        });
     });
 
-    it("should find previousMoves", () => {
-        const nextMoves = new Pgn("1. e4 c5 (1... Nf6 2. e5 (2. Nc3))")
-            .selectMove(move => move.name === "Nc3")
-            .previousMoves()
-            .map(move => move.name);
+    describe("previousMoves", () => {
+        it("should find previousMoves", () => {
+            const previousMoves = new Pgn("1. e4 c5 (1... Nf6 2. e5 (2. Nc3))")
+                .selectMove(move => move.name === "Nc3")
+                .previousMoves()
+                .map(move => move.name);
 
-        expect(nextMoves).toEqual(["e4", "Nf6", "Nc3"]);
+            expect(previousMoves).toEqual(["e4", "Nf6", "Nc3"]);
+        });
+
+        it("should return empty list from starting position", () => {
+            expect(new Pgn("").previousMoves().length).toBe(0);
+        });
     });
 
     describe("move", () => {
