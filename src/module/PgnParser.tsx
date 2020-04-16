@@ -2,12 +2,13 @@ import PgnMoveParser from "./PgnMoveParser";
 import {Tags} from "./types";
 import _ from "lodash";
 import {Move} from "./Move";
+import {VariationMap} from "./VariationMap";
 
 export interface PgnData {
     tags: Tags,
     result: string,
-    moveTree: Move,
-    currentMove?: Move
+    currentMove?: Move,
+    variationMap: VariationMap
 }
 
 export class PgnParser {
@@ -30,15 +31,14 @@ export class PgnParser {
 
     public parse(): PgnData {
         const tags = this.parseTags();
-        const moveTree = new PgnMoveParser(this.parseMoveText()).parse();
+        const pgnMoveParser = new PgnMoveParser(this.parseMoveText());
+        const variationMap = pgnMoveParser.mapVariations();
 
         return {
             tags,
             result: this.parseResult(),
-            moveTree,
-            currentMove: moveTree.variations.length > 0
-                ? moveTree.variations[0][moveTree.variations[0].length - 1]
-                : moveTree
+            variationMap,
+            currentMove: Move.root()
         };
     }
 

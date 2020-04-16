@@ -49,7 +49,7 @@ describe("Parsing tests", () => {
 });
 
 describe("methods", () => {
-    console.log(new Pgn()
+    const pgn = new Pgn()
         .addTag("Title", "Example pgn")
         .addTag("Description", "Shows how to add tags, moves, variations and comments")
         .move("e4")
@@ -62,8 +62,9 @@ describe("methods", () => {
         .selectMove(move => move.name === "e4")
         .move("e5")
         .previousMove()
-        .move("c5")
-        .toString());
+        .move("c5");
+
+    console.log(pgn.toString());
 
     describe("toString", () => {
         it("converts tags to string", () => {
@@ -84,7 +85,7 @@ describe("methods", () => {
             expect(new Pgn(moves).toString()).toBe(moves);
         });
 
-        it("converts flat list of moves to string", () => {
+        it("converts flat nextMoves of moves to string", () => {
             const moves = "1. e4 c5 2. Nf3 *";
             expect(new Pgn(moves).toString()).toBe(moves);
         });
@@ -98,6 +99,10 @@ describe("methods", () => {
             const moves = "1. e4 (1. c4 c5 foo bar (1... e5 2. g3 {foo} (2. Nc3 {foo})) (1... Nf6)) 1... c5 *";
 
             expect(new Pgn(moves).toString()).toBe(moves);
+        });
+
+        it("converts empty string", () => {
+            expect(new Pgn("").toString()).toBe("*");
         });
     });
 
@@ -129,35 +134,33 @@ describe("methods", () => {
         expect(pgn.find(move => move.name === "foo")).toBeNull();
     });
 
-    it("converts variationsToString", () => {
-        const actualMoveText = pgn.variationsToString(pgn.moveTree.variations);
-        const expectedMoveText = pgnString.split("\n\n")[1].replace(/\n/g, " ").trim();
-
-        expect(expectedMoveText.startsWith(actualMoveText)).toBeTruthy();
-    });
-
     it("should addResult", () => {
         expect(pgn.addResult("1-0").result).toBe("1-0");
     });
 
+    it("should find nextMoves", () => {
+        const nextMoves = new Pgn("1. e4 c5 (1... Nf6) (1... e5)")
+            .selectMove(move => move.name === "e4")
+            .nextMoves()
+            .map(move => move.name);
+
+        expect(nextMoves).toEqual(["c5", "Nf6", "e5"]);
+    });
+
+    it("should find previousMoves", () => {
+        const nextMoves = new Pgn("1. e4 c5 (1... Nf6 2. e5 (2. Nc3))")
+            .selectMove(move => move.name === "Nc3")
+            .previousMoves()
+            .map(move => move.name);
+
+        expect(nextMoves).toEqual(["e4", "Nf6", "Nc3"]);
+    });
+
     describe("move", () => {
         it("adds new move if next move does not exist", () => {
-            const previousLastMove = pgn.lastMove().currentMove;
-            const lastWhiteMove = pgn.move("Ke1").lastMove().currentMove;
-            const lastBlackMove = pgn.move("Ke1").move("Kd8").lastMove().currentMove;
+            const pgn = new Pgn().move("d4").move("d5");
 
-            expect(lastWhiteMove).toBeDefined();
-            expect(lastBlackMove).toBeDefined();
-            expect(previousLastMove).toBeDefined();
-
-            if(lastWhiteMove && lastBlackMove && previousLastMove){
-                expect(lastWhiteMove.number).toBe(previousLastMove.number + 1);
-                expect(lastWhiteMove.color).toBe("white");
-                expect(lastWhiteMove.name).toBe("Ke1");
-                expect(lastBlackMove.number).toBe(previousLastMove.number + 1);
-                expect(lastBlackMove.color).toBe("black");
-                expect(lastBlackMove.name).toBe("Kd8");
-            }
+            expect(pgn.toString()).toBe("1. d4 d5 *");
         });
 
         it("adds variation if the next move already exist", () => {
@@ -183,15 +186,18 @@ describe("methods", () => {
                 .move("e4");
 
             expect(pgn.toString()).toBe("1. d4 (1. e4) (1. Nf3) *");
+            expect(pgn.getCurrentMove().name).toBe("e4");
         });
 
         it("does not add move if given move exists among next moves", () => {
             const pgn = new Pgn("1. e4 e6 (1... c5) *")
-                .previousMove()
+                .selectMove(move => move.name === "e4")
                 .move("c5")
+                .previousMove()
                 .move("e6");
 
             expect(pgn.toString()).toBe("1. e4 e6 (1... c5) *");
+            expect(pgn.getCurrentMove().name).toBe("e6");
         });
     });
 
@@ -216,16 +222,17 @@ describe("methods", () => {
     it("should selectMove", () => {
         const pgn = new Pgn("1. e4 (1. c4 e5 (1... c5 2. g3 g6))").selectMove(move => move.name === "g6");
 
-        expect(pgn.currentMove.name).toBe("g6");
+        expect(pgn.getCurrentMove().name).toBe("g6");
     });
 
     it("should go to nextMove", () => {
         const pgn = new Pgn("1. e4 (1. c4 e5 (1... c5 2. g3 g6))")
             .selectMove(move => move.name === "c5");
 
-        expect(pgn.nextMove().currentMove.name).toBe("g3");
-        expect(pgn.nextMove().nextMove().currentMove.name).toBe("g6");
-        expect(pgn.nextMove().nextMove().nextMove().currentMove.name).toBe("g6");
+        expect(pgn.nextMove().getCurrentMove().name).toBe("g3");
+        expect(pgn.nextMove().nextMove().getCurrentMove().name).toBe("g6");
+        expect(pgn.nextMove().nextMove().nextMove().getCurrentMove().name).toBe("g6");
+        expect(pgn.startingPosition().nextMove().getCurrentMove().name).toBe("e4");
     });
 
     describe("previousMove", () => {
@@ -237,23 +244,23 @@ describe("methods", () => {
             const c4 = c5.previousMove();
             const root = c4.previousMove();
 
-            expect(c5.currentMove.name).toBe("c5");
-            expect(c4.currentMove.name).toBe("c4");
-            expect(root.currentMove.name).toBe("root");
-            expect(root.previousMove().currentMove.name).toBe("root");
+            expect(c5.getCurrentMove().name).toBe("c5");
+            expect(c4.getCurrentMove().name).toBe("c4");
+            expect(root.getCurrentMove().name).toBe("root");
+            expect(root.previousMove().getCurrentMove().name).toBe("root");
         });
 
         it("should go to previousMove in main variation", () => {
-            const d4 = new Pgn("1. e4 e5 (1... c5) (1... e6 d4)")
+            const d4 = new Pgn("1. e4 e5 (1... c5) (1... e6 2. d4)")
                 .selectMove(move => move.name === "d4");
 
             const e6 = d4.previousMove();
             const e4 = e6.previousMove();
             const root = e4.previousMove();
 
-            expect(e6.currentMove.name).toBe("e6");
-            expect(e4.currentMove.name).toBe("e4");
-            expect(root.currentMove.name).toBe("root");
+            expect(e6.getCurrentMove().name).toBe("e6");
+            expect(e4.getCurrentMove().name).toBe("e4");
+            expect(root.getCurrentMove().name).toBe("root");
         });
     });
 
@@ -262,7 +269,15 @@ describe("methods", () => {
             .selectMove(move => move.name === "g3")
             .firstMove();
 
-        expect(pgn.currentMove.name).toBe("c4");
+        expect(pgn.getCurrentMove().name).toBe("c4");
+    });
+
+    it("should go to lastMove in variation", () => {
+        const pgn = new Pgn("1. e4 (1. c4 e5 2. g3) 1... e6 (1... c5)")
+            .selectMove(move => move.name === "e4")
+            .lastMove();
+
+        expect(pgn.getCurrentMove().name).toBe("e6");
     });
 
     it("should parse list of pgns", () => {

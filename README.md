@@ -1,12 +1,11 @@
 # chess-pgn
-chess-pgn is a library which includes tools for working with Portable Game Notation (PGN) in an immutable manner.
+chess-pgn is a library which includes tools for working with Portable Game Notation (PGN).
 
 ## Installation
 ``npm install chess-pgn``
 
 ## Example usage
 ````javascript
-// Each method call creates a new Pgn instance
 const pgn = new Pgn()
     .addTag("Title", "Example pgn")
     .addTag("Description", "Shows how to add tags, moves, variations and comments")
@@ -25,6 +24,6 @@ const pgn = new Pgn()
 console.log(pgn.toString());
 // [Title "Example pgn"]
 // [Description "Shows how to add tags, moves, variations and comments"]
-       
+//
 // 1. e4 {king's pawn} (1. d4 Nf6 (1... d5)) 1... e5 (1... c5) *
 ````

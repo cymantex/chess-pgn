@@ -40,15 +40,22 @@ describe("result", () => {
 
 describe("moves", () => {
     const parseMoves = (pgn: string) => {
-        const moveTree = new PgnParser(pgn).parse().moveTree;
+        const pgnData = new PgnParser(pgn).parse();
+        const currentMove = pgnData.currentMove;
 
-        return map(moveTree.variations, move => {
-            const {number, color, name, comment, variations, annotation} = move;
-            return {number, color, name, comment, variations, annotation};
-        });
+        if (!currentMove) return undefined;
+
+        const tree = pgnData.variationMap.tree();
+
+        return map(tree, ({number, name, color, variations, annotation, comment}) =>
+            ({number, name, color, variations, annotation, comment}));
     };
 
     //TODO: Validation
+
+    it("parses pgn without moves", () => {
+        expect(parseMoves("")).toEqual([[]]);
+    });
 
     it("parses single move", () => {
         expect(parseMoves("1. e4 {A reasonable first move}")).toEqual([[{
@@ -61,13 +68,11 @@ describe("moves", () => {
     });
 
     it("parses flat list of moves", () => {
-        expect(parseMoves("1. e4 c5 2. Nf3")).toEqual([
-            [
-                {number: 1, color: "white", name: "e4", variations: []},
-                {number: 1, color: "black", name: "c5", variations: []},
-                {number: 2, color: "white", name: "Nf3", variations: []}
-            ]
-        ]);
+        expect(parseMoves("1. e4 c5 2. Nf3")).toEqual([[
+            {number: 1, color: "white", name: "e4", variations: []},
+            {number: 1, color: "black", name: "c5", variations: []},
+            {number: 2, color: "white", name: "Nf3", variations: []}
+        ]]);
     });
 
     it("parses single nested moves", () => {
@@ -78,7 +83,9 @@ describe("moves", () => {
                     color: "white",
                     name: "e4",
                     variations: [
-                        [{number: 1, color: "black", name: "c5", variations: []}],
+                        [
+                            {number: 1, color: "black", name: "c5", variations: []}
+                        ],
                     ]
                 },
                 {
@@ -86,20 +93,56 @@ describe("moves", () => {
                     color: "black",
                     name: "e5",
                     variations: [
-                        [{number: 2, color: "white", name: "c3", variations: []}]
+                        [
+                            {number: 2, color: "white", name: "c3", variations: []}
+                        ]
                     ]
                 },
                 {number: 2, color: "white", name: "Nf3", variations: []}
             ],
             [
-                {number: 1, color: "white", name: "c4", comment: "english", variations: []},
-                {number: 1, color: "black", name: "c5", comment: "symmetrical", variations: []},
-                {number: 2, color: "white", name: "g3", variations: []},
-                {number: 2, color: "black", name: "g6", variations: []},
+                {
+                    "color": "white",
+                    "comment": "english",
+                    "name": "c4",
+                    "number": 1,
+                    "variations": []
+                },
+                {
+                    "color": "black",
+                    "comment": "symmetrical",
+                    "name": "c5",
+                    "number": 1,
+                    "variations": []
+                },
+                {
+                    "color": "white",
+                    "name": "g3",
+                    "number": 2,
+                    "variations": []
+                },
+                {
+                    "color": "black",
+                    "name": "g6",
+                    "number": 2,
+                    "variations": []
+                }
             ],
             [
-                {number: 1, color: "white", name: "Nf3", annotation: "N", variations: []},
-                {number: 1, color: "black", name: "Nf6", comment: "indian", variations: []}
+                {
+                    "annotation": "N",
+                    "color": "white",
+                    "name": "Nf3",
+                    "number": 1,
+                    "variations": []
+                },
+                {
+                    "color": "black",
+                    "comment": "indian",
+                    "name": "Nf6",
+                    "number": 1,
+                    "variations": []
+                }
             ]
         ]);
     });
@@ -139,5 +182,21 @@ describe("moves", () => {
                 }
             ]
         ]);
+    });
+
+    it("sets variation ids correctly", () => {
+        const moves = "1. e4 (1. c4 c5 foo bar (1... e5 2. g3 {foo} (2. Nc3 {foo})) (1... Nf6)) 1... c5";
+        const variationMap = new PgnParser(moves).parse().variationMap;
+        const e5 = variationMap.findMove(move => move.name === "e5");
+
+        expect(e5).toBeDefined();
+
+        if (e5) {
+            const variation = variationMap.getVariation(e5.variationId);
+
+            if (variation.parentMoveId && variation.parentVariationId) {
+                expect(variationMap.getMove(variation.parentVariationId, variation.parentMoveId).name).toBe("c4");
+            }
+        }
     });
 });

@@ -1,41 +1,32 @@
 import PgnParser, {PgnData} from "./PgnParser";
-import {MoveArgs, Tags} from "./types";
+import {MoveArgs, MoveTree, Tags} from "./types";
 import {Move} from "./Move";
-import {
-    addMove,
-    filter,
-    findMove,
-    findVariation,
-    findVariationParent,
-    map,
-    toggleColor,
-    traverse
-} from "./utils";
 import {Color} from "chess-fen/types";
+import {VariationMap} from "./VariationMap";
+import {indexOf, toggleColor} from "./utils";
 
 export interface PgnCloneArgs extends Partial<PgnData> {}
 
-//TODO: add support for empty string
-//TODO: add support for delete remaining moves
+//TODO: add delete variation / move
+//TODO: add promoting/demoting variations?
 export class Pgn {
     readonly tags: Tags;
     readonly result: string;
-    readonly moveTree: Move;
     readonly currentMove: Move;
+    private readonly variationMap: VariationMap;
 
     constructor(args?: PgnData | string) {
         const parsedArgs = typeof args === "string" ? new PgnParser(args).parse() : args;
-        const defaultRoot = Move.root();
-        const {tags, result, moveTree, currentMove} = {
+        const {tags, result, variationMap, currentMove} = {
             tags: {},
             result: "*",
-            moveTree: defaultRoot,
-            currentMove: defaultRoot,
+            variationMap: new VariationMap(),
+            currentMove: Move.root(),
             ...parsedArgs
         };
         this.tags = tags;
         this.result = result;
-        this.moveTree = moveTree;
+        this.variationMap = variationMap;
         this.currentMove = currentMove;
     }
 
@@ -47,7 +38,13 @@ export class Pgn {
     }
 
     public cloneWith(args: PgnCloneArgs): Pgn {
-        return new Pgn({...this, ...args});
+        return new Pgn({
+            tags: this.tags,
+            result: this.result,
+            currentMove: this.currentMove,
+            variationMap: this.variationMap.clone(),
+            ...args
+        });
     }
 
     public addResult = (result: string): Pgn => this.cloneWith({result});
@@ -55,39 +52,30 @@ export class Pgn {
     public addTag = (key: string, value: string): Pgn => this.cloneWith({tags: {...this.tags, [key]: value}});
 
     public move = (args: string | MoveArgs): Pgn => {
-        const newNumber = this.currentMove.color === "black" ? this.currentMove.number + 1 : this.currentMove.number;
-        const newColor = toggleColor(this.currentMove.color);
-        const newMove = this.createMove(args, newNumber, newColor);
+        const moveName = typeof args === "string" ? args : args.name;
+        const nextMoveWithSameName = this.nextMoves().find(move => move.name === moveName);
 
-        if (this.getVariations().length === 0) {
-            return this.cloneWith({
-                moveTree: {...this.moveTree, variations: [[newMove]]},
-                currentMove: newMove
-            });
-        } else if (this.currentMove.name === "root") {
-            const variationsIncludesMove = this
-                .moveTree
-                .variations
-                .map(variation => variation[0].name)
-                .find(name => name === newMove.name);
-
-            const variations = variationsIncludesMove
-                ? this.moveTree.variations
-                : [...this.moveTree.variations, [newMove]];
-
-            return this.cloneWith({
-                moveTree: {...this.moveTree, variations},
-                currentMove: variationsIncludesMove ? this.currentMove : newMove
-            });
+        if (nextMoveWithSameName) {
+            return this.cloneWith({currentMove: nextMoveWithSameName});
         }
 
-        const variations = addMove(this.getVariations(), newMove, this.currentMove);
-        const addedMove = findMove(variations, ({id}) => id === newMove.id);
+        const currentMove = this.getCurrentMove();
+        const newNumber = currentMove.color === "black" ? currentMove.number + 1 : currentMove.number;
+        const newColor = toggleColor(currentMove.color);
+        let variation = currentMove.variationId;
+        const nextMove = this.getNextMove();
 
-        return this.cloneWith({
-            moveTree: {...this.moveTree, variations},
-            currentMove: addedMove ? newMove : this.currentMove
-        });
+        if(Move.isRoot(this.currentMove)) {
+            variation = this.variationMap.addVariation().id;
+        } else if(nextMove) {
+            variation = this.variationMap.addVariation(currentMove).id;
+            currentMove.variations.push(variation);
+        }
+
+        const newMove = Pgn.createMove(args, variation, newNumber, newColor);
+        this.variationMap.addMove(newMove);
+
+        return this.cloneWith({currentMove: newMove});
     };
 
     public comment(comment: string) {
@@ -108,47 +96,28 @@ export class Pgn {
         return this;
     }
 
+    public getCurrentMove(): Move {
+        return this.currentMove;
+    }
+
     public nextMove(): Pgn {
-        const currentVariation = findVariation(this.getVariations(), this.currentMove.id);
-
-        for(let i = 0; i < currentVariation.length; i++){
-            if (currentVariation[i].id === this.currentMove.id) {
-                return this.cloneWith({
-                    currentMove: currentVariation[i + 1] ? currentVariation[i + 1] : this.currentMove
-                });
-            }
-        }
-
-        return this;
+        const nextMove = this.getNextMove();
+        return nextMove ? this.cloneWith({currentMove: nextMove}) : this;
     }
 
     public previousMove(): Pgn {
-        const currentVariation = findVariation(this.getVariations(), this.currentMove.id);
-
-        for(let i = 0; i < currentVariation.length; i++){
-            if (currentVariation[i].id === this.currentMove.id) {
-                const previousMove = currentVariation[i - 1];
-
-                if (previousMove) {
-                    return this.cloneWith({currentMove: previousMove});
-                }
-            }
-        }
-
-        const parent = findVariationParent(this.getVariations(), this.currentMove.id);
-
-        return parent
-            ? this.cloneWith({currentMove: parent})
-            : this.startingPosition();
+        return this.cloneWith({currentMove: this.getPreviousMove(this.currentMove)});
     }
 
     public lastMove(): Pgn {
-        const currentVariation = findVariation(this.getVariations(), this.currentMove.id);
+        const currentMove = this.getCurrentMove();
+        const currentVariation = this.variationMap.getMoves(currentMove.variationId);
         return this.cloneWith({currentMove: currentVariation[currentVariation.length - 1]});
     }
 
     public firstMove(): Pgn {
-        const currentVariation = findVariation(this.getVariations(), this.currentMove.id);
+        const currentMove = this.getCurrentMove();
+        const currentVariation = this.variationMap.getMoves(currentMove.variationId);
         return this.cloneWith({currentMove: currentVariation[0]});
     }
 
@@ -156,12 +125,61 @@ export class Pgn {
         return this.cloneWith({currentMove: Move.root()});
     }
 
+    public nextMoves(): Move[] {
+        const currentMove = this.getCurrentMove();
+
+        if (Move.isRoot(currentMove)) {
+            return this.variationMap.getMainLines().map(mainLine => mainLine[0]);
+        }
+
+        const variation = this.variationMap.getVariation(currentMove.variationId);
+        const i = indexOf(currentMove, variation.moves);
+        let nextMove = variation.moves[i + 1];
+
+        return nextMove
+            ? [nextMove, ...currentMove.variations.map(variation => this.variationMap.getMoves(variation)[0])]
+            : [];
+    }
+
+    public previousMoves(): Move[] {
+        const previousMoves = [];
+        let currentMove = this.currentMove;
+
+        while(!Move.isRoot(currentMove)){
+            previousMoves.push(currentMove);
+            currentMove = this.getPreviousMove(currentMove);
+        }
+
+        return previousMoves.reverse();
+    }
+
+    public traverse(callback: (move: Move) => any): Pgn {
+        this.variationMap.traverse(callback);
+        return this;
+    };
+
+    public find(predicate: (move: Move) => boolean): Move|null {
+        return this.variationMap.findMove(predicate);
+    };
+
+    public map(callback: (move: Move) => Move): Pgn {
+        return this.cloneWith({
+            variationMap: this.variationMap.map(callback)
+        });
+    };
+
+    public filter(predicate: (move: Move) => boolean): Pgn {
+        return this.cloneWith({
+            variationMap: this.variationMap.filter(predicate)
+        });
+    };
+
     public toString = (): string => {
         const tags = Object
             .keys(this.tags)
             .map(tagKey => `[${tagKey} "${this.tags[tagKey]}"]`)
             .join("\n");
-        const moves = this.variationsToString(this.getVariations());
+        const moves = this.variationsToString(this.variationMap.tree());
 
         let pgnString = "";
 
@@ -182,38 +200,9 @@ export class Pgn {
         return pgnString;
     };
 
-    public traverse(callback: (move: Move) => any): Pgn {
-        traverse(this.getVariations(), callback);
-        return this;
-    };
+    public variationsToString(variations: MoveTree[][]): string {
+        if (variations.length === 0) return "";
 
-    public find(predicate: (move: Move) => boolean): Move|null {
-        return findMove(this.getVariations(), predicate);
-    };
-
-    public map(callback: (move: Move) => Move, replaceVariations = false): Pgn {
-        return this.cloneWith({
-            moveTree: {
-                ...this.moveTree,
-                variations: map<Move>(this.getVariations(), callback, replaceVariations)
-            }
-        });
-    };
-
-    public filter(predicate: (move: Move) => boolean): Pgn {
-        return this.cloneWith({
-            moveTree: {
-                ...this.moveTree,
-                variations: filter(this.getVariations(), predicate)
-            }
-        });
-    };
-    
-    public getVariations(){
-        return this.moveTree.variations;
-    }
-
-    public variationsToString(variations: Move[][]): string {
         const [mainVariation, ...subVariations] = variations;
         const [firstMove] = mainVariation;
 
@@ -221,7 +210,7 @@ export class Pgn {
             return "";
         }
 
-        const moveToString = ({number, name, annotation, comment, color}: Move, addBlackMoveNumber = false) => {
+        const moveToString = ({number, name, annotation, comment, color}: MoveTree, addBlackMoveNumber = false) => {
             let moveString = "";
 
             if(color === "white"){
@@ -247,7 +236,7 @@ export class Pgn {
             return moveString;
         };
 
-        const variationToString = (variation: Move[], addBlackMoveNumber?: (move: Move) => boolean): string[] => {
+        const variationToString = (variation: MoveTree[], addBlackMoveNumber?: (move: MoveTree) => boolean): string[] => {
             let previousMoveHadVariations = false;
 
             return variation.map((move, i) => {
@@ -291,19 +280,40 @@ export class Pgn {
     };
 
     private updateCurrentMove(move: Partial<Move>){
-        const newCurrentMove = {...this.currentMove, ...move};
+        const currentMove = this.getCurrentMove();
+        const newCurrentMove: Move = {...currentMove, ...move};
+        this.variationMap.updateMove(newCurrentMove);
 
-        return this.cloneWith({
-            moveTree: this.map(move => move.id === this.currentMove.id
-                ? newCurrentMove : move, move.variations !== undefined).moveTree,
-            currentMove: newCurrentMove
-        });
+        return this.cloneWith({currentMove: newCurrentMove});
     }
 
-    private createMove(args: string | MoveArgs, number: number, color: Color): Move {
+    private getNextMove(): Move|undefined {
+        const currentMove = this.getCurrentMove();
+
+        if(Move.isRoot(currentMove)){
+            return this.variationMap.getTheMainLine()[0];
+        }
+
+        const variation = this.variationMap.getVariation(currentMove.variationId);
+        const i = indexOf(currentMove, variation.moves);
+        return variation.moves[i + 1];
+    }
+
+    private getPreviousMove(move: Move): Move {
+        if (Move.isRoot(move)) {
+            return move;
+        }
+
+        const variation = this.variationMap.getVariation(move.variationId);
+        const i = indexOf(move, variation.moves);
+        const previousMove = variation.moves[i - 1] ? variation.moves[i - 1] : this.variationMap.getParent(variation);
+        return previousMove ? previousMove : Move.root();
+    }
+
+    private static createMove(args: string | MoveArgs, variationId: string, number: number, color: Color): Move {
         return typeof args === "string"
-            ? new Move({name: args, number, color})
-            : new Move({...args, number, color});
+            ? new Move({name: args, number, color, variationId})
+            : new Move({...args, number, color, variationId});
     }
 }
 

@@ -1,27 +1,31 @@
 import {VariationStack} from "./VariationStack";
 import {Move} from "./Move";
 import {isStandardNotation} from "./utils";
-import {Color} from "chess-fen/types";
+import {VariationMap} from "./VariationMap";
 
 export class PgnMoveParser {
     private readonly moveText: string;
-    private readonly moveTree: Move;
     private comment: string;
     private token: string;
     private moveNumber: number;
-    private variationStack: VariationStack;
+    private readonly variationStack: VariationStack;
+    private readonly variationMap: VariationMap;
+    rootMove?: Move;
 
     constructor(pgnMoveText: string) {
         this.moveText = pgnMoveText;
-        this.moveTree = Move.root();
-        this.variationStack = new VariationStack(this.moveTree);
-        this.variationStack.addVariation();
+
+        this.variationMap = new VariationMap();
+
+        this.variationStack = new VariationStack();
+        this.variationStack.addVariation(this.variationMap.addVariation());
+
         this.moveNumber = 0;
         this.comment = "";
         this.token = "";
     }
 
-    public parse(): Move {
+    public mapVariations(): VariationMap {
         this.moveText
             .split(" ")
             .forEach(token => {
@@ -31,7 +35,7 @@ export class PgnMoveParser {
                 this.parseMove();
             });
 
-        return this.moveTree;
+        return this.variationMap;
     }
 
     private parseComment(): void {
@@ -57,7 +61,15 @@ export class PgnMoveParser {
 
     private parseVariation(): void {
         if(this.isVariationStart()){
-            this.variationStack.addVariation();
+            const previousMove = this.variationStack.getPreviousMove();
+            const currentMove = this.variationStack.getCurrentMove();
+
+            if (currentMove) {
+                const variation = this.variationMap.addVariation(previousMove);
+                this.variationStack.addVariation(variation);
+            } else {
+                throw new Error("Encountered variation before any main move");
+            }
         } else if(this.isVariationEnd()){
             const numberOfEndedVariations = this.token.split(")").length - 1;
             this.token = this.token.replace(/\)/g, "");
@@ -89,24 +101,20 @@ export class PgnMoveParser {
         return parseInt(this.token.replace(/\W/g, ""), 10);
     }
 
-    private addMove(nextMove: Move, parent: Move){
-        if(this.isNewVariation()) {
-            parent.variations.push([nextMove]);
-        } else if(this.isVariation()) {
-            parent.variations[parent.variations.length - 1].push(nextMove);
-        } else {
-            // main line
-            this.moveTree.variations[0].push(nextMove);
+    private addMove(nextMove: Move, parent?: Move){
+        if (!this.rootMove) {
+            this.rootMove = nextMove;
         }
+
+        if(parent && this.isNewVariation(parent)) {
+            parent.variations.push(nextMove.variationId);
+        }
+
+        this.variationMap.addMove(nextMove);
     }
 
-    private isVariation(){
-        return this.variationStack.size() > 2;
-    }
-
-    private isNewVariation(): boolean {
+    private isNewVariation(parent: Move): boolean {
         const nextMove = this.variationStack.getCurrentMove();
-        const parent = this.variationStack.getCurrentParent();
 
         return nextMove.color !== parent.color && (
             (parent.color === "white" && nextMove.number === parent.number) ||
