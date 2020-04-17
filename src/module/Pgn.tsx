@@ -9,7 +9,6 @@ export interface PgnCloneArgs extends Partial<PgnData> {}
 
 //TODO: add delete variation / move
 //TODO: add promoting/demoting variations?
-//TODO: adds [undefined] in nextMoves from empty root
 export class Pgn {
     readonly tags: Tags;
     readonly result: string;
@@ -31,10 +30,35 @@ export class Pgn {
         this.currentMove = currentMove;
     }
 
+    public static merge(pgnList: string): Pgn {
+        return Pgn
+            .parse(pgnList)
+            .reduce((mergedPgn, pgn) => {
+                let newPgn = mergedPgn;
+
+                pgn.variations().forEach(moves => {
+                    newPgn = newPgn.startingPosition();
+                    moves.forEach(move => {
+                        newPgn = newPgn.move({
+                            name: move.name,
+                            comment: move.comment,
+                            annotation: move.annotation
+                        });
+                    });
+                });
+
+                return mergedPgn.cloneWith({
+                    tags: {...mergedPgn.tags, ...pgn.tags},
+                    result: pgn.result,
+                    variationMap: newPgn.variationMap,
+                    currentMove: Move.root()
+                });
+            }, new Pgn());
+    }
+
     public static parse(pgnList: string): Pgn[] {
         return pgnList
-            .split("\n\n[")
-            .map(pgn => !pgn.startsWith("[") ? "[" + pgn : pgn)
+            .split("\n\n\n")
             .map(pgn => new Pgn(pgn));
     }
 
@@ -112,12 +136,23 @@ export class Pgn {
 
     public lastMove(): Pgn {
         const currentMove = this.getCurrentMove();
+
+        if (Move.isRoot(currentMove)) {
+            const mainLine = this.variationMap.getTheMainLine();
+            const lastMainLineMove = mainLine[mainLine.length - 1];
+            const lastMove = lastMainLineMove ? lastMainLineMove : currentMove;
+            return this.cloneWith({currentMove: lastMove})
+        }
+
         const currentVariation = this.variationMap.getMoves(currentMove.variationId);
         return this.cloneWith({currentMove: currentVariation[currentVariation.length - 1]});
     }
 
     public firstMove(): Pgn {
         const currentMove = this.getCurrentMove();
+
+        if (Move.isRoot(currentMove)) return this;
+
         const currentVariation = this.variationMap.getMoves(currentMove.variationId);
         return this.cloneWith({currentMove: currentVariation[0]});
     }
@@ -150,12 +185,21 @@ export class Pgn {
         const previousMoves = [];
         let currentMove = this.currentMove;
 
-        while(!Move.isRoot(currentMove)){
+        while(currentMove && !Move.isRoot(currentMove)){
             previousMoves.push(currentMove);
             currentMove = this.getPreviousMove(currentMove);
         }
 
         return previousMoves.reverse();
+    }
+
+    public variations(): Move[][] {
+        const variations = this.variationMap.variations();
+
+        return variations.map(moves => {
+            const lastMove = moves[moves.length - 1];
+            return this.cloneWith({currentMove: lastMove}).previousMoves();
+        });
     }
 
     public traverse(callback: (move: Move) => any): Pgn {

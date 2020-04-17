@@ -21,8 +21,12 @@ describe("tags", () => {
         expect(pgn.tags.Date).toBe("????.??.??");
     });
 
-    it("parses tags in pgn without tags to root object", () => {
+    it("parses tags in pgn without tags to empty object", () => {
         expect(new PgnParser("1. e4").parse().tags).toEqual({});
+    });
+
+    it("parses empty pgn to have empty object of tags", () => {
+        expect(new PgnParser("").parse().tags).toEqual({});
     });
 });
 
@@ -54,7 +58,8 @@ describe("moves", () => {
     //TODO: Validation
 
     it("parses pgn without moves", () => {
-        expect(parseMoves("")).toEqual([[]]);
+        expect(new PgnParser("").parse().variationMap.size()).toBe(0);
+        expect(parseMoves("")).toEqual([]);
     });
 
     it("parses single move", () => {

@@ -18,7 +18,10 @@ export class PgnMoveParser {
         this.variationMap = new VariationMap();
 
         this.variationStack = new VariationStack();
-        this.variationStack.addVariation(this.variationMap.addVariation());
+
+        if (this.moveText.includes("1.")) {
+            this.variationStack.addVariation(this.variationMap.addVariation());
+        }
 
         this.moveNumber = 0;
         this.comment = "";

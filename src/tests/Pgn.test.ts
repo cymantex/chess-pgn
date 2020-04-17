@@ -5,7 +5,7 @@ const createTestPgn = ({event, date, result = ""}: {event?: string, date?: strin
     const dateTag = date ? `[Date "${date}"]` : "";
 
     return (
-`${eventTag}
+        `${eventTag}
 ${dateTag}
 
 1. Nf3 d5 2. d4 Bf5 3. c4 e6 4. Nc3 Nc6 5. cxd5 exd5 6. Bf4 Bd6 7. Bg3 (7. Nxd5 Be4 8. Nc3 Bxf3 9. Bxd6 Qxd6 10. gxf3 Qxd4 11. e3 Qf6 12. Nd5 Qd6 13. Qb3 Nge7 {Aronian,L (2795)-Li,C (2746) Moscow 2016}) 7... Nf6 8. e3 Ne7 N (8... O-O 9. Be2 Ne7 10. O-O c6 11. Nd2 Nc8 12. a3 Bxg3 13. hxg3 Qe7 14. b4 a6 15. Qb3 b5 16. Na2 Nb6 {Grunberg,M (2426)-Stevic,H (2616) Austria 2012}) 9. Bh4 Ne4 10. Bd3 c6 11. Qc2 Qa5 12. Bxe7 Bxe7 13. O-O Nxc3 14. Bxf5 Nb5 15. Ne5 Qc7 16. Bxh7 Bf6 17. f4 O-O-O 18. Bd3 Nd6 19. Rac1 Kb8 20. b4 Qe7 21. a4 Rc8 22. Qb3?! {Allowing some tactics based on the unprotected e-pawn.} (22. Qe2) 22... Bxe5! 23. dxe5 f6! 24. Qc3 (24. exd6? Qxe3+ 25. Kh1 (25. Rf2 Qxc1+ 26. Kh2 Kh8 N) 25... Rxh2+ 26. Kxh2 Rh8+) 24... Nf7 (24... fxe5) 25. Bf5 Rc7 26. exf6 gxf6 27. Rf3 Nd6 28. Bd3 Rd8 29. Qd4 Ne4 30. Rh3 a5 31. bxa5 c5 32. Qb2 c4 33. Bxe4 dxe4 34. Rh5? {He was still better, but Kramnik again misses a tactic.} (34. Rg3) 34... c3! 35. Rxc3 Rd1+ 36. Kf2 Qd8! {Suddenly there's no defense.} 37. Kg3 Rd2 38. Qb3 Rg7+ 39. Kh3 Rgxg2 40. Qf7 f5! ${result}`)
@@ -84,8 +84,12 @@ describe("methods", () => {
             expect(new Pgn(moves).toString()).toBe(moves);
         });
 
-        it("converts empty string", () => {
+        it("converts empty string pgn to empty string", () => {
             expect(new Pgn("").toString()).toBe("*");
+        });
+
+        it("converts empty pgn to empty string", () => {
+            expect(new Pgn().toString()).toBe("*");
         });
     });
 
@@ -113,7 +117,7 @@ describe("methods", () => {
         const nc3 = pgn.find(move => move.name === "Nc3");
 
         expect(nc3).toBeDefined();
-        if (nc3) expect(nc3.name).toBe("Nc3");
+        if(nc3) expect(nc3.name).toBe("Nc3");
         expect(pgn.find(move => move.name === "foo")).toBeNull();
     });
 
@@ -267,21 +271,130 @@ describe("methods", () => {
         expect(pgn.getCurrentMove().name).toBe("c4");
     });
 
-    it("should go to lastMove in variation", () => {
-        const pgn = new Pgn("1. e4 (1. c4 e5 2. g3) 1... e6 (1... c5)")
-            .selectMove(move => move.name === "e4")
-            .lastMove();
+    describe("lastMove", () => {
+        it("should go to lastMove in variation", () => {
+            const pgn = new Pgn("1. e4 (1. c4 e5 2. g3) 1... e6 (1... c5)")
+                .selectMove(move => move.name === "e4")
+                .lastMove();
 
-        expect(pgn.getCurrentMove().name).toBe("e6");
+            expect(pgn.getCurrentMove().name).toBe("e6");
+        });
+
+        it("should go to lastMove in main line from starting position", () => {
+            const pgn = new Pgn("1. e4 (1. c4 e5 2. g3) 1... e6 (1... c5)");
+
+            expect(pgn.lastMove().getCurrentMove().name).toBe("e6");
+        });
+    });
+
+    it("should get variations", () => {
+        const variations = new Pgn("1. e4 (1. c4 c5 foo bar (1... e5 2. g3 {foo} (2. Nc3 {foo})) (1... Nf6)) 1... c5")
+            .variations()
+            .map(moves => moves
+                .map(move => move.color === "white" ? `${move.number}. ${move.name}` : move.name)
+                .join(" "));
+
+        expect(variations).toEqual([
+            "1. e4 c5",
+            "1. c4 c5",
+            "1. c4 e5 2. g3",
+            "1. c4 e5 2. Nc3",
+            "1. c4 Nf6"
+        ])
     });
 
     it("should parse list of pgns", () => {
         const games = [
             createTestPgn({event, date, result}),
+            "1. e4 c5 2. Nf3 Nc6 1-0",
             createTestPgn({event, date, result})
-        ].join("\n\n");
+        ].join("\n\n\n");
 
         const pgnList = Pgn.parse(games);
-        expect(pgnList.map(pgn => pgn.toString()).join("\n\n")).toBe(games);
+        expect(pgnList.map(pgn => pgn.toString()).join("\n\n\n")).toBe(games);
+    });
+});
+
+describe("merge", () => {
+    it("should merge tags", () => {
+        const pgnList = [
+            new Pgn().addTag("Title", "foo").addTag("Description", "hello").toString(),
+            new Pgn().addTag("Site", "Stockholm").addTag("Title", "tournament").toString()
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).tags).toEqual({
+            "Title": "tournament",
+            "Description": "hello",
+            "Site": "Stockholm"
+        });
+    });
+
+    it("should set result from last pgn", () => {
+        const pgnList = [
+            new Pgn().addResult("1-0").toString(),
+            new Pgn().addResult("0-1").toString()
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).result).toEqual("0-1");
+    });
+
+    it("should merge identical flat list of moves", () => {
+        const pgnList = [
+            "1. e4 c5 2. Nf3 Nc6",
+            "1. e4 c5 2. Nf3 Nc6",
+            "1. e4 c5 2. Nf3 Nc6"
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).toString()).toEqual("1. e4 c5 2. Nf3 Nc6 *");
+    });
+
+    it("should merge identical nested list of moves", () => {
+        const pgnList = [
+            "1. e4 (1. c4 {english} c5 {symmetrical} 2. g3 g6) (1. Nf3 N Nf6) 1... e5 (1... c5) 2. Nf3 (2. c3)",
+            "1. e4 (1. c4 {english} c5 {symmetrical} 2. g3 g6) (1. Nf3 N Nf6) 1... e5 (1... c5) 2. Nf3 (2. c3)",
+            "1. e4 (1. c4 {english} c5 {symmetrical} 2. g3 g6) (1. Nf3 N Nf6) 1... e5 (1... c5) 2. Nf3 (2. c3)"
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).toString()).toEqual(
+            "1. e4 (1. c4 {english} c5 {symmetrical} 2. g3 g6) (1. Nf3 N Nf6) 1... e5 (1... c5) 2. Nf3 (2. c3) *");
+    });
+
+    it("should merge different flat list of moves", () => {
+        const pgnList = [
+            "1. e4 c5 2. Nf3 Nc6",
+            "1. d4 d5 2. c4"
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).toString()).toEqual("1. e4 (1. d4 d5 2. c4) 1... c5 2. Nf3 Nc6 *");
+    });
+
+    it("should merge slightly different lists of flat moves", () => {
+        const pgnList = [
+            "1. e4 c5 2. Nf3 Nc6",
+            "1. e4 c5 2. Nc3 g6"
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).toString()).toEqual("1. e4 c5 2. Nf3 (2. Nc3 g6) 2... Nc6 *");
+    });
+
+    it("should merge different lists of single nested moves", () => {
+        const pgnList = [
+            "1. e4 (1. c4 c5) 1... e5 (1... c5)",
+            "1. d4 d5 2. c4",
+            "1. e4 (1. f4) (1. c4 Nf6)"
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).toString())
+            .toEqual("1. e4 (1. c4 c5 (1... Nf6)) (1. d4 d5 2. c4) (1. f4) 1... e5 (1... c5) *");
+    });
+
+    it("should merge different lists of multi nested moves", () => {
+        const pgnList = [
+            "1. e4 e5 (1... c5 2. Nf3 (2. Nc3 {closed}))",
+            "1. e4 c5 2. Nc3 e6 (2... g6 3. g3 (3. f4 {grand prix}))"
+        ].join("\n\n\n");
+
+        expect(Pgn.merge(pgnList).toString())
+            .toEqual("1. e4 e5 (1... c5 2. Nf3 (2. Nc3 {closed} e6 (2... g6 3. g3 (3. f4 {grand prix})))) *");
     });
 });

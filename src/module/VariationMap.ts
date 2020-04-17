@@ -97,7 +97,17 @@ export class VariationMap {
         return moves;
     }
 
-    public traverse(callback: (move: Move) => Move): void {
+    public variations(): Move[][] {
+        const variations = [];
+
+        for (const variation of this.variationMap.values()) {
+            variations.push(variation.moves)
+        }
+
+        return variations;
+    }
+
+    public traverse(callback: (move: Move) => void): void {
         this.variationMap.forEach((variation) => {
             variation.moves.forEach(callback);
         });
